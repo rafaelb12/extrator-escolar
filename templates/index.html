@@ -25,7 +25,7 @@ document.getElementById("form").addEventListener("submit", async (e) => {
     const formData = new FormData(e.target);
     const status = document.getElementById("status");
 
-    status.innerText = "⏳ Processando...";
+    status.innerText = "⏳ Processando vários arquivos...";
 
     const response = await fetch("/upload", {
         method: "POST",
@@ -37,10 +37,10 @@ document.getElementById("form").addEventListener("submit", async (e) => {
 
     const a = document.createElement("a");
     a.href = url;
-    a.download = "resultado.csv";
+    a.download = "resultados.zip";
     a.click();
 
-    status.innerText = "✅ Concluído!";
+    status.innerText = "✅ Todos os arquivos processados!";
 });
 </script>
 
