@@ -132,7 +132,6 @@ def processar_pdf(caminho_pdf):
                 numero = num.group(1)
                 logradouro = logradouro.replace(numero, "").strip()
 
-        # 🔥 SEXO AUTOMÁTICO
         sexo = inferir_sexo(dados.get("nome", ""))
 
         alunos.append({
@@ -155,9 +154,14 @@ def processar_pdf(caminho_pdf):
         print("Erro:", e)
         continue
 
-    df = pd.DataFrame(alunos)
+   df = pd.DataFrame(alunos)
 
-    caminho_csv = caminho_pdf.replace(".pdf", ".csv")
-    df.to_csv(caminho_csv, index=False, encoding="utf-8-sig")
+df = df[df["nome"].astype(str).str.strip() != ""]  # remove linhas vazias
+df = df.drop_duplicates()  # remove duplicados
+df = df.reset_index(drop=True)  # reorganiza índice
+df = df.fillna("")  # evita células vazias bugadas
 
-    return caminho_csv
+caminho_csv = caminho_pdf.replace(".pdf", ".csv")
+df.to_csv(caminho_csv, index=False, encoding="utf-8-sig")
+
+return caminho_csv
