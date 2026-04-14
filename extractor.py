@@ -5,7 +5,7 @@ import unicodedata
 import requests
 
 # =========================
-# FUNÇÕES BASE
+# UTIL
 # =========================
 def limpar(texto):
     if not texto:
@@ -17,18 +17,21 @@ def remover_acentos(texto):
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
 # =========================
-# SEXO AUTOMÁTICO (ONLINE)
+# SEXO AUTOMÁTICO
 # =========================
 def inferir_sexo(nome):
     try:
         primeiro = remover_acentos(nome.split()[0].lower())
 
         r = requests.get("https://api.genderize.io", params={"name": primeiro}, timeout=3)
+
         if r.status_code == 200:
             genero = r.json().get("gender")
-            if genero == "male":
+            prob = r.json().get("probability", 0)
+
+            if genero == "male" and prob > 0.7:
                 return "M"
-            elif genero == "female":
+            elif genero == "female" and prob > 0.7:
                 return "F"
     except:
         pass
@@ -36,87 +39,106 @@ def inferir_sexo(nome):
     return ""
 
 # =========================
-# EXTRAÇÃO INTELIGENTE
+# PROCESSAR BLOCO (1 ALUNO)
+# =========================
+def processar_bloco(linhas):
+
+    texto = " ".join(linhas)
+
+    nome = max(linhas, key=lambda x: len(x.split()))
+
+    cpf = re.search(r"\b\d{11}\b", texto)
+    nascimento = re.search(r"\d{2}/\d{2}/\d{4}", texto)
+
+    mae = ""
+    pai = ""
+
+    for i, linha in enumerate(linhas):
+        if nome in linha:
+            if i + 1 < len(linhas):
+                mae = linhas[i + 1]
+            if i + 2 < len(linhas):
+                pai = linhas[i + 2]
+            break
+
+    cidade = ""
+    bairro = ""
+    logradouro = ""
+
+    for linha in linhas:
+        l = linha.upper()
+
+        if any(c in l for c in ["ITAPIPOCA", "FORTALEZA", "ACARAU"]):
+            cidade = linha
+
+        if any(x in l for x in ["RUA", "AV", "SITIO", "PV"]):
+            logradouro = linha
+
+        if any(b in l for b in ["CENTRO", "COQUEIRO", "FLORES"]):
+            bairro = linha
+
+    sexo = inferir_sexo(nome)
+
+    return {
+        "nome": limpar(nome),
+        "cpf": cpf.group(0) if cpf else "",
+        "nascimento": nascimento.group(0) if nascimento else "",
+        "mae_nome": limpar(mae),
+        "pai_nome": limpar(pai),
+        "cidade": limpar(cidade),
+        "bairro": limpar(bairro),
+        "logradouro": limpar(logradouro),
+        "sexo": sexo,
+        "etnia": ""
+    }
+
+# =========================
+# PROCESSAR PDF
 # =========================
 def processar_pdf(caminho_pdf):
-    texto = ""
-
-    with pdfplumber.open(caminho_pdf) as pdf:
-        for pagina in pdf.pages:
-            texto += pagina.extract_text() + "\n"
-
-    # ✅ QUEBRA CORRETA (IGUAL AO COLAB)
-    blocos = re.split(r"ALUNO:\s*", texto)
 
     dados = []
 
-    for bloco in blocos[1:]:
-        bloco = bloco.strip()
+    with pdfplumber.open(caminho_pdf) as pdf:
+        for pagina in pdf.pages:
 
-        try:
-            linhas = [l.strip() for l in bloco.split("\n") if l.strip()]
+            texto = pagina.extract_text()
+            if not texto:
+                continue
 
-            # 🔹 NOME = primeira linha válida
-            nome = linhas[0] if len(linhas) > 0 else ""
+            linhas = texto.split("\n")
 
-            # 🔹 CPF
-            cpf_match = re.search(r"\b\d{11}\b", bloco)
-            cpf = cpf_match.group(0) if cpf_match else ""
-
-            # 🔹 DATA
-            nasc_match = re.search(r"\d{2}/\d{2}/\d{4}", bloco)
-            nascimento = nasc_match.group(0) if nasc_match else ""
-
-            # 🔹 MÃE / PAI
-            mae = ""
-            pai = ""
-
-            for i, linha in enumerate(linhas):
-                if "MÃE" in linha.upper():
-                    if i + 1 < len(linhas):
-                        mae = linhas[i + 1]
-
-                if "PAI" in linha.upper():
-                    if i + 1 < len(linhas):
-                        pai = linhas[i + 1]
-
-            # 🔹 CIDADE / ENDEREÇO
-            cidade = ""
-            bairro = ""
-            logradouro = ""
+            bloco = []
 
             for linha in linhas:
-                if "ITAPIPOCA" in linha or "FORTALEZA" in linha:
-                    cidade = linha
+                linha = linha.strip()
 
-                if "SITIO" in linha or "AVENIDA" in linha or "PV" in linha:
-                    logradouro = linha
+                # IGNORA LIXO
+                if (
+                    linha == ""
+                    or "SIGE" in linha
+                    or "ESCOLA" in linha
+                    or "ENDEREÇO" in linha
+                    or "ALUNO" in linha
+                ):
+                    continue
 
-                if "BARRENTO" in linha or "FLORES" in linha or "COQUEIRO" in linha:
-                    bairro = linha
+                # NOVO ALUNO
+                if re.match(r"^\d{6,8}$", linha):
+                    if bloco:
+                        dados.append(processar_bloco(bloco))
+                        bloco = []
 
-            sexo = inferir_sexo(nome)
+                bloco.append(linha)
 
-            dados.append({
-                "nome": limpar(nome),
-                "cpf": cpf,
-                "nascimento": nascimento,
-                "mae_nome": limpar(mae),
-                "pai_nome": limpar(pai),
-                "cidade": limpar(cidade),
-                "bairro": limpar(bairro),
-                "logradouro": limpar(logradouro),
-                "sexo": sexo,
-                "etnia": ""
-            })
-
-        except:
-            continue
+            if bloco:
+                dados.append(processar_bloco(bloco))
 
     df = pd.DataFrame(dados)
 
-    # 🔥 ESSENCIAL PRA NÃO QUEBRAR NO SHEETS
-    df = df.replace(r'\n', ' ', regex=True)
+    # 🔥 LIMPEZA FINAL (resolve seu bug)
+    df = df.replace(r'[\r\n]+', ' ', regex=True)
+    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
 
     caminho_csv = caminho_pdf.replace(".pdf", ".csv")
     df.to_csv(caminho_csv, index=False, encoding="utf-8-sig")
