@@ -45,53 +45,42 @@ def processar_pdf(caminho_pdf):
         for pagina in pdf.pages:
             texto += pagina.extract_text() + "\n"
 
-    # 🔥 DIVIDE POR ALUNO (PADRÃO DO PDF)
-    blocos = re.split(r"\n\s*\d+\s*\n", texto)
+    # ✅ QUEBRA CORRETA (IGUAL AO COLAB)
+    blocos = re.split(r"ALUNO:\s*", texto)
 
     dados = []
 
-    for bloco in blocos:
+    for bloco in blocos[1:]:
         bloco = bloco.strip()
 
-        if len(bloco) < 50:
-            continue
-
         try:
-            # =========================
-            # NOME (linha com mais palavras)
-            # =========================
-            linhas = bloco.split("\n")
-            nome = max(linhas, key=lambda x: len(x.split()))
+            linhas = [l.strip() for l in bloco.split("\n") if l.strip()]
 
-            # =========================
-            # CPF
-            # =========================
+            # 🔹 NOME = primeira linha válida
+            nome = linhas[0] if len(linhas) > 0 else ""
+
+            # 🔹 CPF
             cpf_match = re.search(r"\b\d{11}\b", bloco)
             cpf = cpf_match.group(0) if cpf_match else ""
 
-            # =========================
-            # DATA NASCIMENTO
-            # =========================
+            # 🔹 DATA
             nasc_match = re.search(r"\d{2}/\d{2}/\d{4}", bloco)
             nascimento = nasc_match.group(0) if nasc_match else ""
 
-            # =========================
-            # MÃE e PAI (linhas próximas)
-            # =========================
+            # 🔹 MÃE / PAI
             mae = ""
             pai = ""
 
             for i, linha in enumerate(linhas):
-                if nome in linha:
+                if "MÃE" in linha.upper():
                     if i + 1 < len(linhas):
                         mae = linhas[i + 1]
-                    if i + 2 < len(linhas):
-                        pai = linhas[i + 2]
-                    break
 
-            # =========================
-            # ENDEREÇO
-            # =========================
+                if "PAI" in linha.upper():
+                    if i + 1 < len(linhas):
+                        pai = linhas[i + 1]
+
+            # 🔹 CIDADE / ENDEREÇO
             cidade = ""
             bairro = ""
             logradouro = ""
@@ -126,7 +115,7 @@ def processar_pdf(caminho_pdf):
 
     df = pd.DataFrame(dados)
 
-    # 🔥 REMOVE BUG DE QUEBRA DE LINHA
+    # 🔥 ESSENCIAL PRA NÃO QUEBRAR NO SHEETS
     df = df.replace(r'\n', ' ', regex=True)
 
     caminho_csv = caminho_pdf.replace(".pdf", ".csv")
