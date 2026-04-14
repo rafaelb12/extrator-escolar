@@ -25,17 +25,15 @@ def inferir_sexo(nome):
 
     primeiro = remover_acentos(nome.split()[0].upper())
 
-    # Base local (rápido)
     if primeiro in nomes_femininos:
         return "F"
     if primeiro in nomes_masculinos:
         return "M"
 
-    # Cache
     if primeiro in cache_sexo:
         return cache_sexo[primeiro]
 
-    # API online
+    # API on
     try:
         r = requests.get("https://api.genderize.io", params={"name": primeiro.lower()}, timeout=3)
         if r.status_code == 200:
@@ -84,14 +82,14 @@ def processar_pdf(caminho_pdf):
     try:
         texto = limpar_texto(bloco)
 
-        texto = texto.replace(" CPF:", "|CPF:")
-        texto = texto.replace(" DATA:", "|DATA:")
-        texto = texto.replace(" BAIRRO:", "|BAIRRO:")
-        texto = texto.replace(" MÃE:", "|MAE:")
-        texto = texto.replace(" PAI:", "|PAI:")
-        texto = texto.replace(" COR:", "|COR:")
-        texto = texto.replace(" CIDADE:", "|CIDADE:")
-        texto = texto.replace(" EMAIL:", "|EMAIL:")
+        texto = texto.replace(" CPF:", "CPF:")
+        texto = texto.replace(" DATA:", "DATA:")
+        texto = texto.replace(" BAIRRO:", "BAIRRO:")
+        texto = texto.replace(" MÃE:", "MAE:")
+        texto = texto.replace(" PAI:", "PAI:")
+        texto = texto.replace(" COR:", "COR:")
+        texto = texto.replace(" CIDADE:", "CIDADE:")
+        texto = texto.replace(" EMAIL:", "EMAIL:")
 
         partes = texto.split("|")
 
@@ -155,13 +153,6 @@ def processar_pdf(caminho_pdf):
         continue
 
 df = pd.DataFrame(alunos)
-df = df.dropna(how='all')
-df = df.fillna("")
-
-for col in df.columns:
-    df[col] = df[col].astype(str).str.strip()
-
-df = df.reset_index(drop=True)
 
 caminho_csv = caminho_pdf.replace(".pdf", ".csv")
 df.to_csv(caminho_csv, index=False, encoding="utf-8-sig")
