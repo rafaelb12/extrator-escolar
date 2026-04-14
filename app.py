@@ -17,7 +17,6 @@ def index():
 def upload():
     arquivos = request.files.getlist("files")
 
-    # ✅ VALIDAÇÃO
     if not arquivos or arquivos[0].filename == "":
         return "Nenhum arquivo enviado", 400
 
@@ -32,7 +31,6 @@ def upload():
         caminho_csv = processar_pdf(caminho_pdf)
         caminhos_csv.append(caminho_csv)
 
-    # ✅ CRIA ZIP
     zip_path = os.path.join(UPLOAD_FOLDER, "resultado.zip")
 
     with zipfile.ZipFile(zip_path, 'w') as zipf:
