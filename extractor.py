@@ -4,9 +4,21 @@ import re
 import unicodedata
 import requests
 
+# =========================
+# FUNÇÕES BASE
+# =========================
+def limpar(texto):
+    if not texto:
+        return ""
+    texto = re.sub(r'\s+', ' ', texto)
+    return texto.strip()
+
 def remover_acentos(texto):
     return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
 
+# =========================
+# SEXO AUTOMÁTICO (ONLINE)
+# =========================
 def inferir_sexo(nome):
     try:
         primeiro = remover_acentos(nome.split()[0].lower())
@@ -23,6 +35,9 @@ def inferir_sexo(nome):
 
     return ""
 
+# =========================
+# EXTRAÇÃO INTELIGENTE
+# =========================
 def processar_pdf(caminho_pdf):
     texto = ""
 
@@ -30,41 +45,78 @@ def processar_pdf(caminho_pdf):
         for pagina in pdf.pages:
             texto += pagina.extract_text() + "\n"
 
-    blocos = re.split(r"\n\d+\n", texto)
+    # 🔥 DIVIDE POR ALUNO (PADRÃO DO PDF)
+    blocos = re.split(r"\n\s*\d+\s*\n", texto)
 
     dados = []
 
     for bloco in blocos:
-        linhas = [l.strip() for l in bloco.split("\n") if l.strip()]
+        bloco = bloco.strip()
 
-        if len(linhas) < 8:
+        if len(bloco) < 50:
             continue
 
         try:
-            nome = linhas[3]
-            cpf = re.sub(r"\D", "", linhas[4])
+            # =========================
+            # NOME (linha com mais palavras)
+            # =========================
+            linhas = bloco.split("\n")
+            nome = max(linhas, key=lambda x: len(x.split()))
 
-            mae = linhas[5]
-            pai = linhas[6]
+            # =========================
+            # CPF
+            # =========================
+            cpf_match = re.search(r"\b\d{11}\b", bloco)
+            cpf = cpf_match.group(0) if cpf_match else ""
 
-            cidade = linhas[7]
-            logradouro = linhas[8] if len(linhas) > 8 else ""
-            bairro = linhas[9] if len(linhas) > 9 else ""
+            # =========================
+            # DATA NASCIMENTO
+            # =========================
+            nasc_match = re.search(r"\d{2}/\d{2}/\d{4}", bloco)
+            nascimento = nasc_match.group(0) if nasc_match else ""
 
-            nascimento_match = re.search(r"(\d{2}/\d{2}/\d{4})", bloco)
-            nascimento = nascimento_match.group(1) if nascimento_match else ""
+            # =========================
+            # MÃE e PAI (linhas próximas)
+            # =========================
+            mae = ""
+            pai = ""
+
+            for i, linha in enumerate(linhas):
+                if nome in linha:
+                    if i + 1 < len(linhas):
+                        mae = linhas[i + 1]
+                    if i + 2 < len(linhas):
+                        pai = linhas[i + 2]
+                    break
+
+            # =========================
+            # ENDEREÇO
+            # =========================
+            cidade = ""
+            bairro = ""
+            logradouro = ""
+
+            for linha in linhas:
+                if "ITAPIPOCA" in linha or "FORTALEZA" in linha:
+                    cidade = linha
+
+                if "SITIO" in linha or "AVENIDA" in linha or "PV" in linha:
+                    logradouro = linha
+
+                if "BARRENTO" in linha or "FLORES" in linha or "COQUEIRO" in linha:
+                    bairro = linha
 
             sexo = inferir_sexo(nome)
 
             dados.append({
-                "nome": nome,
+                "nome": limpar(nome),
                 "cpf": cpf,
                 "nascimento": nascimento,
-                "mae_nome": mae,
-                "pai_nome": pai,
-                "cidade": cidade,
-                "bairro": bairro,
-                "logradouro": logradouro,
+                "mae_nome": limpar(mae),
+                "pai_nome": limpar(pai),
+                "cidade": limpar(cidade),
+                "bairro": limpar(bairro),
+                "logradouro": limpar(logradouro),
                 "sexo": sexo,
                 "etnia": ""
             })
@@ -74,6 +126,7 @@ def processar_pdf(caminho_pdf):
 
     df = pd.DataFrame(dados)
 
+    # 🔥 REMOVE BUG DE QUEBRA DE LINHA
     df = df.replace(r'\n', ' ', regex=True)
 
     caminho_csv = caminho_pdf.replace(".pdf", ".csv")
