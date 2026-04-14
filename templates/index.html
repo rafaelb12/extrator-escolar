@@ -10,7 +10,8 @@
   <div class="container">
     <h1>📄 Extrator de Alunos</h1>
 
-    <form id="form">
+    <!-- ✅ CORREÇÃO AQUI -->
+    <form id="form" enctype="multipart/form-data">
       <input type="file" name="files" accept=".pdf" multiple required>
       <button type="submit">Processar</button>
     </form>
@@ -27,20 +28,33 @@ document.getElementById("form").addEventListener("submit", async (e) => {
 
     status.innerText = "⏳ Processando vários arquivos...";
 
-    const response = await fetch("/upload", {
-        method: "POST",
-        body: formData
-    });
+    try {
+        const response = await fetch("/upload", {
+            method: "POST",
+            body: formData
+        });
 
-    const blob = await response.blob();
-    const url = window.URL.createObjectURL(blob);
+        // ✅ TRATAMENTO DE ERRO
+        if (!response.ok) {
+            const erro = await response.text();
+            console.error("Erro:", erro);
+            status.innerText = "❌ Erro no servidor!";
+            return;
+        }
 
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "resultados.zip";
-    a.click();
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
 
-    status.innerText = "✅ Todos os arquivos processados!";
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "resultados.zip";
+        a.click();
+
+        status.innerText = "✅ Todos os arquivos processados!";
+    } catch (err) {
+        console.error(err);
+        status.innerText = "❌ Falha na requisição!";
+    }
 });
 </script>
 
