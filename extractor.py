@@ -138,7 +138,7 @@ def processar_pdf(caminho_pdf):
 
     # 🔥 LIMPEZA FINAL (resolve seu bug)
     df = df.replace(r'[\r\n]+', ' ', regex=True)
-    df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+    df = df.map(lambda x: x.strip() if isinstance(x, str) else x)
 
     caminho_csv = caminho_pdf.replace(".pdf", ".csv")
     df.to_csv(caminho_csv, index=False, encoding="utf-8-sig")
