@@ -1,73 +1,77 @@
 import pandas as pd
 import pdfplumber
 import re
+import os
 import unicodedata
 import requests
 
-# =========================================================
-# BASE LOCAL DE NOMES
-# =========================================================
-nomes_femininos = {"MARIA","ANA","JULIA","BEATRIZ","SOFIA","ALICE","LAURA","LUIZA","RAFAELA","GABRIELA"}
-nomes_masculinos = {"JOAO","JOSE","GABRIEL","LUCAS","PEDRO","MATEUS","RAFAEL","ENZO","MIGUEL","ARTHUR"}
+# ==============================
+# FUNÇÕES BASE
+# ==============================
 
-cache_sexo = {}
-
-# =========================================================
-# FUNÇÕES UTILITÁRIAS
-# =========================================================
-def remover_acentos(texto):
+def limpar_texto(texto):
     if not texto:
         return ""
-    return ''.join(c for c in unicodedata.normalize('NFD', texto) if unicodedata.category(c) != 'Mn')
-
-def limpar(texto):
-    if not texto:
-        return ""
-    texto = texto.replace("\n", " ")
     texto = re.sub(r'\s+', ' ', texto)
-    return texto.strip(" -,;")
+    return texto.strip()
+
+def remover_acentos(texto):
+    return ''.join(
+        c for c in unicodedata.normalize('NFD', texto)
+        if unicodedata.category(c) != 'Mn'
+    )
 
 def limpar_cpf(cpf):
     return re.sub(r'\D', '', cpf or "")
 
-# =========================================================
-# SEXO AUTOMÁTICO (API + CACHE)
-# =========================================================
+def extrair(padrao, texto):
+    match = re.search(padrao, texto, re.IGNORECASE)
+    return limpar_texto(match.group(1)) if match else ""
+
+# ==============================
+# SEXO AUTOMÁTICO (API)
+# ==============================
+
+cache_sexo = {}
+
 def inferir_sexo(nome):
     if not nome:
         return ""
 
-    primeiro = remover_acentos(nome.split()[0].upper())
-
-    if primeiro in nomes_femininos:
-        return "F"
-    if primeiro in nomes_masculinos:
-        return "M"
+    primeiro = remover_acentos(nome.split()[0].lower())
 
     if primeiro in cache_sexo:
         return cache_sexo[primeiro]
 
     try:
-        r = requests.get("https://api.genderize.io", params={"name": primeiro.lower()}, timeout=5)
+        r = requests.get(
+            "https://api.genderize.io",
+            params={"name": primeiro},
+            timeout=3
+        )
+
         if r.status_code == 200:
             data = r.json()
-            if data["gender"] == "female" and data["probability"] >= 0.7:
-                cache_sexo[primeiro] = "F"
-                return "F"
-            if data["gender"] == "male" and data["probability"] >= 0.7:
+            if data["gender"] == "male":
                 cache_sexo[primeiro] = "M"
                 return "M"
+            elif data["gender"] == "female":
+                cache_sexo[primeiro] = "F"
+                return "F"
+
     except:
         pass
 
     cache_sexo[primeiro] = ""
     return ""
 
-# =========================================================
+# ==============================
 # ETNIA
-# =========================================================
+# ==============================
+
 def mapear_etnia(cor):
-    cor = remover_acentos((cor or "").upper())
+    cor = remover_acentos(cor.upper())
+
     if "BRANC" in cor: return "1"
     if "PRET" in cor: return "2"
     if "PARD" in cor: return "3"
@@ -75,87 +79,59 @@ def mapear_etnia(cor):
     if "INDIGENA" in cor: return "5"
     return ""
 
-# =========================================================
-# EXTRAÇÃO PRINCIPAL
-# =========================================================
+# ==============================
+# PROCESSAMENTO PRINCIPAL
+# ==============================
+
 def processar_pdf(caminho_pdf):
-    texto_completo = ""
-
-    with pdfplumber.open(caminho_pdf) as pdf:
-        for pagina in pdf.pages:
-            try:
-                texto = pagina.extract_text(layout=True)
-            except:
-                texto = pagina.extract_text()
-
-            if texto:
-                texto_completo += texto + "\n"
-
-    # separa alunos
-    blocos = re.split(r"ALUNO:\s*", texto_completo)
 
     dados = []
 
+    with pdfplumber.open(caminho_pdf) as pdf:
+        texto = ""
+        for pagina in pdf.pages:
+            t = pagina.extract_text()
+            if t:
+                texto += t + "\n"
+
+    blocos = re.split(r"ALUNO:\s+", texto)
+
     for bloco in blocos[1:]:
-        bloco = limpar(bloco)
+        try:
+            nome = extrair(r"^(.*?)\s+(CPF|DATA)", bloco)
+            cpf = limpar_cpf(extrair(r"CPF:\s*([\d\.\-]+)", bloco))
+            nascimento = extrair(r"(\d{2}/\d{2}/\d{4})", bloco)
+            mae = extrair(r"M[ÃA]E:\s*(.*?)(?:PAI:|$)", bloco)
+            pai = extrair(r"PAI:\s*(.*?)(?:RG|$)", bloco)
+            cidade = extrair(r"CIDADE:\s*(.*)", bloco)
+            bairro = extrair(r"BAIRRO:\s*(.*)", bloco)
+            etnia_raw = extrair(r"COR:\s*(.*)", bloco)
 
-        nome = limpar(re.search(r"^(.*?)\s+CPF:", bloco).group(1)) if re.search(r"^(.*?)\s+CPF:", bloco) else ""
+            sexo = inferir_sexo(nome)
+            etnia = mapear_etnia(etnia_raw)
 
-        cpf = limpar_cpf(re.search(r"CPF:\s*([\d\.\-]+)", bloco).group(1)) if re.search(r"CPF:", bloco) else ""
+            logradouro = extrair(r"\d{2}/\d{2}/\d{4}\s*-\s*(.*)", bloco)
 
-        nascimento = limpar(re.search(r"DATA:\s*([0-9/]+)", bloco).group(1)) if re.search(r"DATA:", bloco) else ""
-
-        cidade = limpar(re.search(r"CIDADE:\s*(.*?)(EMAIL:|$)", bloco).group(1)) if re.search(r"CIDADE:", bloco) else ""
-
-        bairro = limpar(re.search(r"BAIRRO:\s*(.*?)(ALUNO:|$)", bloco).group(1)) if re.search(r"BAIRRO:", bloco) else ""
-
-        mae = limpar(re.search(r"M[ÃA]E:\s*(.*?)(PAI:|$)", bloco).group(1)) if re.search(r"M[ÃA]E:", bloco) else ""
-
-        pai = limpar(re.search(r"PAI:\s*(.*?)(RG:|$)", bloco).group(1)) if re.search(r"PAI:", bloco) else ""
-
-        etnia_raw = limpar(re.search(r"COR:\s*(.*?)(CIDADE:|$)", bloco).group(1)) if re.search(r"COR:", bloco) else ""
-        etnia = mapear_etnia(etnia_raw)
-
-        sexo = inferir_sexo(nome)
-
-        # endereço simplificado
-        endereco_match = re.search(r"DATA:.*?-\s*(.*?)(EMAIL:|BAIRRO:|$)", bloco)
-        logradouro = ""
-        numero = ""
-
-        if endereco_match:
-            endereco = limpar(endereco_match.group(1))
-
-            num_match = re.search(r'(\d+|S/N)', endereco)
-            if num_match:
-                numero = num_match.group(1)
-                logradouro = endereco.replace(numero, "").strip(" ,")
-            else:
-                logradouro = endereco
-
-        if nome:
             dados.append({
                 "nome": nome,
                 "cpf": cpf,
                 "nascimento": nascimento,
-                "sexo": sexo,
-                "logradouro": logradouro,
-                "numero": numero,
-                "bairro": bairro,
-                "cidade": cidade,
-                "estado": "CE",
-                "etnia": etnia,
                 "mae_nome": mae,
-                "pai_nome": pai
+                "pai_nome": pai,
+                "cidade": cidade,
+                "bairro": bairro,
+                "logradouro": logradouro,
+                "sexo": sexo,
+                "etnia": etnia
             })
+
+        except Exception as e:
+            print("Erro ao processar aluno:", e)
 
     df = pd.DataFrame(dados)
 
-    df = df[df["nome"].str.strip() != ""]
+    # 🔥 CORREÇÃO PRINCIPAL DO CSV
+    nome_saida = caminho_pdf.replace(".pdf", ".csv")
+    df.to_csv(nome_saida, index=False, encoding="utf-8-sig")
 
-    df = df.dropna(how="all")
-
-    nome_csv = caminho_pdf.replace(".pdf", ".csv")
-    df.to_csv(nome_csv, index=False, encoding="utf-8-sig")
-
-    return nome_csv
+    return nome_saida
