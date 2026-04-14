@@ -101,15 +101,13 @@ def processar_pdf(caminho_pdf):
             nome = extrair(r"^(.*?)\s+(CPF|DATA)", bloco)
             cpf = limpar_cpf(extrair(r"CPF:\s*([\d\.\-]+)", bloco))
             nascimento = extrair(r"(\d{2}/\d{2}/\d{4})", bloco)
-            mae = extrair(r"M[ÃA]E:\s*(.*?)(?:PAI:|$)", bloco)
-            pai = extrair(r"PAI:\s*(.*?)(?:RG|$)", bloco)
-            cidade = extrair(r"CIDADE:\s*(.*)", bloco)
-            bairro = extrair(r"BAIRRO:\s*(.*)", bloco)
-            etnia_raw = extrair(r"COR:\s*(.*)", bloco)
-
+            mae = extrair(r"M[ÃA]E:\s*(.*?)(?:\n|PAI:)", bloco)
+            pai = extrair(r"PAI:\s*(.*?)(?:\n|RG|$)", bloco)
+            cidade = extrair(r"CIDADE:\s*(.*?)(?:\n|EMAIL:|$)", bloco)
+            bairro = extrair(r"BAIRRO:\s*(.*?)(?:\n|ALUNO:|$)", bloco)
+            etnia_raw = extrair(r"COR:\s*(.*?)(?:\n|CIDADE:|$)", bloco)
             sexo = inferir_sexo(nome)
             etnia = mapear_etnia(etnia_raw)
-
             logradouro = extrair(r"\d{2}/\d{2}/\d{4}\s*-\s*(.*)", bloco)
 
             dados.append({
