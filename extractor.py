@@ -154,12 +154,14 @@ def processar_pdf(caminho_pdf):
         print("Erro:", e)
         continue
 
-   df = pd.DataFrame(alunos)
+df = pd.DataFrame(alunos)
+df = df.dropna(how='all')
+df = df.fillna("")
 
-df = df[df["nome"].astype(str).str.strip() != ""]  # remove linhas vazias
-df = df.drop_duplicates()  # remove duplicados
-df = df.reset_index(drop=True)  # reorganiza índice
-df = df.fillna("")  # evita células vazias bugadas
+for col in df.columns:
+    df[col] = df[col].astype(str).str.strip()
+
+df = df.reset_index(drop=True)
 
 caminho_csv = caminho_pdf.replace(".pdf", ".csv")
 df.to_csv(caminho_csv, index=False, encoding="utf-8-sig")
