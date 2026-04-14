@@ -81,81 +81,79 @@ def processar_pdf(caminho_pdf):
     blocos = re.split(r"ALUNO:\s+", texto)
 
     for bloco in blocos[1:]:
-        try:
-            linha = limpar_texto(bloco)
+    try:
+        texto = limpar_texto(bloco)
 
-            # NOME
-            nome = re.search(r"^(.*?)\s+CPF:", linha)
-            nome = nome.group(1) if nome else ""
+        texto = texto.replace(" CPF:", "|CPF:")
+        texto = texto.replace(" DATA:", "|DATA:")
+        texto = texto.replace(" BAIRRO:", "|BAIRRO:")
+        texto = texto.replace(" MÃE:", "|MAE:")
+        texto = texto.replace(" PAI:", "|PAI:")
+        texto = texto.replace(" COR:", "|COR:")
+        texto = texto.replace(" CIDADE:", "|CIDADE:")
+        texto = texto.replace(" EMAIL:", "|EMAIL:")
 
-            # CPF
-            cpf = re.search(r"CPF:\s*([\d\.\-]+)", linha)
-            cpf = limpar_cpf(cpf.group(1)) if cpf else ""
+        partes = texto.split("|")
 
-            # DATA
-            nascimento = re.search(r"DATA:\s*([0-9/]+)", linha)
-            nascimento = nascimento.group(1) if nascimento else ""
+        dados = {}
+        dados["nome"] = partes[0].strip()
 
-            # ENDEREÇO
-            endereco = re.search(r"DATA:.*?- (.*?)(EMAIL|BAIRRO|$)", linha)
-            endereco = endereco.group(1).strip() if endereco else ""
+        for p in partes[1:]:
+            if "CPF:" in p:
+                dados["cpf"] = limpar_cpf(p.replace("CPF:", ""))
+            elif "DATA:" in p:
+                dados["nascimento"] = p.replace("DATA:", "").strip()
+            elif "BAIRRO:" in p:
+                dados["bairro"] = p.replace("BAIRRO:", "").strip()
+            elif "MAE:" in p:
+                dados["mae_nome"] = p.replace("MAE:", "").strip()
+            elif "PAI:" in p:
+                dados["pai_nome"] = p.replace("PAI:", "").strip()
+            elif "COR:" in p:
+                dados["etnia"] = mapear_etnia(p.replace("COR:", ""))
+            elif "CIDADE:" in p:
+                dados["cidade"] = p.replace("CIDADE:", "").strip()
 
-            cidade = ""
-            logradouro = ""
-            numero = ""
+        endereco_match = re.search(r"DATA:.*?- (.*?)(EMAIL|BAIRRO|$)", bloco)
+        endereco = endereco_match.group(1).strip() if endereco_match else ""
 
-            if endereco:
-                partes = endereco.split(" ", 1)
-                if len(partes) > 1:
-                    cidade = partes[0]
-                    logradouro = partes[1]
+        cidade = ""
+        logradouro = ""
+        numero = ""
 
-                num = re.search(r"(\d+|S/N)$", logradouro)
-                if num:
-                    numero = num.group(1)
-                    logradouro = logradouro.replace(numero, "").strip()
+        if endereco:
+            partes_end = endereco.split(" ", 1)
+            if len(partes_end) > 1:
+                cidade = partes_end[0]
+                logradouro = partes_end[1]
 
-            # BAIRRO
-            bairro = re.search(r"BAIRRO:\s*(.*?)(ALUNO|$)", linha)
-            bairro = bairro.group(1).strip() if bairro else ""
+            num = re.search(r"(\d+|S/N)$", logradouro)
+            if num:
+                numero = num.group(1)
+                logradouro = logradouro.replace(numero, "").strip()
 
-            # MÃE
-            mae = re.search(r"M[ÃA]E:\s*(.*?)(PAI|CPF|$)", linha)
-            mae = mae.group(1).strip() if mae else ""
+        # 🔥 SEXO AUTOMÁTICO
+        sexo = inferir_sexo(dados.get("nome", ""))
 
-            # PAI
-            pai = re.search(r"PAI:\s*(.*?)(RG|COR|$)", linha)
-            pai = pai.group(1).strip() if pai else ""
+        alunos.append({
+            "nome": dados.get("nome", ""),
+            "cpf": dados.get("cpf", ""),
+            "nascimento": dados.get("nascimento", ""),
+            "sexo": sexo,
+            "logradouro": logradouro,
+            "numero": numero,
+            "bairro": dados.get("bairro", ""),
+            "cidade": cidade or dados.get("cidade", ""),
+            "estado": "CE",
+            "etnia": dados.get("etnia", ""),
+            "mae_nome": dados.get("mae_nome", ""),
+            "pai_nome": dados.get("pai_nome", ""),
+            "telefone": ""
+        })
 
-            # ETNIA
-            cor = re.search(r"COR:\s*(.*?)(CIDADE|$)", linha)
-            etnia = mapear_etnia(cor.group(1)) if cor else ""
-
-            # TELEFONE
-            telefone = re.search(r"(\(?\d{2}\)?\s?\d{4,5}-?\d{4})", linha)
-            telefone = telefone.group(1) if telefone else ""
-
-            # SEXO AUTOMÁTICO
-            sexo = inferir_sexo(nome)
-
-            alunos.append({
-                "nome": nome,
-                "cpf": cpf,
-                "nascimento": nascimento,
-                "sexo": sexo,
-                "logradouro": logradouro,
-                "numero": numero,
-                "bairro": bairro,
-                "cidade": cidade,
-                "estado": "CE",
-                "etnia": etnia,
-                "mae_nome": mae,
-                "pai_nome": pai,
-                "telefone": telefone
-            })
-
-        except:
-            continue
+    except Exception as e:
+        print("Erro:", e)
+        continue
 
     df = pd.DataFrame(alunos)
 
